@@ -1,11 +1,12 @@
 import tiktoken
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from .base import ModelProvider, ModelResponse
 
 class OpenAIProvider(ModelProvider):
     def __init__(self):
         super().__init__()
         self.client = OpenAI()
+        self.async_client =  AsyncOpenAI()
 
         try:
             self.encoding = tiktoken.encoding_for_model("gpt-4o")
@@ -25,6 +26,32 @@ class OpenAIProvider(ModelProvider):
             str: The model's completion for the prompt.
         """
         response = self.client.responses.create(
+            input=prompt,
+            **kwargs
+        )
+
+        return ModelResponse(
+            text=response.output_text,
+            prompt=prompt,
+            token_count=0,
+            cost=0,
+            response_time_m=0,
+            metadata={},
+            raw_response=response
+        )
+    
+    async def agenerate(self, prompt, **kwargs) -> ModelResponse:
+        """
+        Asynchronously get a completion for the given prompt using OpenAI's API.
+
+        Args:
+            prompt (str): The input prompt to complete.
+            **kwargs: Additional parameters for the model.
+
+        Returns:
+            str: The model's completion for the prompt.
+        """
+        response = await self.async_client.responses.create(
             input=prompt,
             **kwargs
         )

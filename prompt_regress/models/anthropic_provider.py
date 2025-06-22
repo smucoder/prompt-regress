@@ -1,4 +1,4 @@
-import anthropic
+from anthropic import Anthropic, AsyncAnthropic
 import tiktoken
 from .base import ModelProvider, ModelResponse
 
@@ -6,7 +6,8 @@ class AnthropicProvider(ModelProvider):
     def __init__(self):
         super().__init__()
 
-        self.client = anthropic.Anthropic()
+        self.client = Anthropic()
+        self.async_client = AsyncAnthropic()
         self.encoding = tiktoken.encoding_for_model("gpt-4o")
 
 
@@ -46,7 +47,54 @@ class AnthropicProvider(ModelProvider):
             metadata={},
             raw_response=message
             )
-        
+    
+    async def agenerate(self, prompt: str, **kwargs) -> str:
+        """
+        Asynchronously get a completion for the given prompt using Anthropic's API.
+
+        Args:
+            prompt (str): The input prompt to complete.
+            **kwargs: Additional parameters for the model.
+
+        Returns:
+            str: The model's completion for the prompt.
+        """
+        message = await self.async_client.messages.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            **kwargs
+            )
+
+        return ModelResponse(
+            text=message['content'][0]['text'],
+            prompt=prompt,
+            token_count=0,
+            cost=0, 
+            response_time_m=0,
+            metadata={},
+            raw_response=message
+            )
+    
+    def input_tokens(self, prompt: str) -> int:
+        """
+        Calculate the number of input tokens for the given prompt.
+
+        Args:
+            prompt (str): The input prompt to analyze.
+
+        Returns:
+            int: The number of input tokens in the prompt.
+        """
+        pass
 
 
     def get_cost(self, input_tokens: int, output_tokens: int) -> float:

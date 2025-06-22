@@ -10,8 +10,6 @@ When upgrading prompts or switching models (e.g. GPT-4 → Claude Opus), develop
 - **Semantic Similarity**: Beyond text matching - understands meaning changes
 - **Cost Tracking**: Monitor token usage and cost differences
 - **JSON Validation**: Ensure structured outputs remain valid
-- **CI/CD Integration**: GitHub Actions workflows included
-- **Easy Setup**: CLI + Python SDK for any workflow
 
 ## 📦 Installation
 
@@ -30,38 +28,46 @@ prompt-regress init
 This creates a `prompt-regress.yml` configuration file:
 
 ```yaml
-models:
-  - name: gpt-4
-    provider: openai
-    parameters: 
-      temperature: 0.7
-      max_tokens: 1000
-  - name: claude-opus
-    provider: anthropic
-    parameters:
-      temperature: 0.7
-      max_tokens: 1000
-
-test_cases:
-  - name: summarization
-    prompt: "Summarize this text in 2-3 sentences: {text}"
-    inputs:
-      - "Long article text here..."
-    expect_json: false
-  
-  - name: json_extraction
-    prompt: "Extract key information as JSON: {data}"
-    inputs:
-      - "John Doe, age 30, works at TechCorp"
-    expect_json: true
-
-thresholds:
+metrics:
+  semantic_similarity:
+    threshold: 0.8
   text_similarity:
     threshold: 0.7
-  semantic_similarity: 
-    threshold: 0.8
-  token_diff_percent: 
-    threshold: 20
+models:
+- name: gpt-4
+  parameters:
+    max_tokens: 1000
+    temperature: 0.7
+  provider: openai
+- name: claude-4
+  parameters:
+    max_tokens: 1000
+    temperature: 0.7
+  provider: anthropic
+- host: http://localhost:11434
+  name: deepseek-r1:1.5b
+  parameters:
+    max_tokens: 1000
+    temperature: 0.7
+  provider: local
+test_cases:
+- inputs:
+  - text: Sample text to summarize
+  name: summarization
+  prompt_template: 'Summarize this text in 2-3 sentences: {text}'
+- inputs:
+  - context: This is a sample context.
+    question: What is the context about?
+  - context: My name is Foo.
+    question: What is my name?
+  name: question_answering
+  prompt_template: 'Answer the question based on the context: {context} Question:
+    {question}'
+- expect_json: true
+  inputs:
+  - data: John Doe, age 30, works at TechCorp
+  name: json_extraction
+  prompt_template: 'Extract key information as JSON: {data}'
 ```
 
 ### 2. Compare Models
@@ -118,12 +124,12 @@ prompt-regress check \
 
 ### List Available Models
 ```bash
-prompt-regress models
+prompt-regress models [--config prompt-regress.yml]
 ```
 
 ### List Test Cases
 ```bash
-prompt-regress tests
+prompt-regress tests [--config prompt-regress.yml]
 ```
 
 ## 🐍 Python SDK
@@ -150,7 +156,7 @@ for result in results:
 
 ## 🤖 Supported Providers
 
-| Provider | Models | API Required |
+| Provider | Models | API Key Required |
 |----------|--------|--------------|
 | OpenAI | gpt-4, gpt-3.5-turbo, etc. | ✅ |
 | Anthropic | claude-opus, claude-sonnet | ✅ |
@@ -235,13 +241,13 @@ prompt-regress check --baseline gpt-4 --target llama2-local
 models:
   - name: custom-gpt-4
     provider: openai
-    api_key: ${OPENAI_API_KEY}
-    temperature: 0.5
-    max_tokens: 2000
+    parameters:
+      temperature: 0.5
+      max_tokens: 2000
     
   - name: local-llama
     provider: local
-    base_url: http://localhost:11434
+    host: http://localhost:11434
     model: llama2
 ```
 
@@ -251,26 +257,25 @@ test_cases:
   - name: code_generation
     prompt: "Generate Python code for: {task}"
     inputs:
-      - "sort a list of dictionaries by key"
-      - "create a REST API endpoint"
+      - task: "sort a list of dictionaries by key"
+      - task: "create a REST API endpoint"
     expect_json: false
     timeout: 30
     
   - name: data_extraction
     prompt: "Extract data as JSON: {text}"
     inputs:
-      - "Company: Acme Corp, Revenue: $1M, Employees: 50"
+      - text: "Company: Acme Corp, Revenue: $1M, Employees: 50"
     expect_json: true
 ```
 
-### Threshold Configuration
+### Metrics Configuration
 ```yaml
-thresholds:
-  text_similarity: 0.7        # Minimum text similarity (0-1)
-  semantic_similarity: 0.8    # Minimum semantic similarity (0-1)
-  token_diff_percent: 20      # Max token difference percentage
-  cost_diff_threshold: 0.01   # Max cost difference in USD
-  response_time_ms: 5000      # Max response time in milliseconds
+metrics:
+  semantic_similarity:        # Minimum semantic similarity (0-1)
+    threshold: 0.8             
+  text_similarity:            # Minimum text similarity (0-1)
+    threshold: 0.7
 ```
 
 ## 🧪 Advanced Usage
@@ -283,19 +288,6 @@ class CustomPromptRegress(PromptRegress):
     def _calculate_custom_similarity(self, text1: str, text2: str) -> float:
         # Your custom similarity logic here
         return similarity_score
-```
-
-### Batch Testing
-```python
-# Test multiple model combinations
-models = ["gpt-4", "claude-opus", "llama2-local"]
-regress = PromptRegress()
-
-for baseline in models:
-    for target in models:
-        if baseline != target:
-            results = regress.compare_models(baseline, target)
-            print(f"{baseline} vs {target}: {results}")
 ```
 
 ### Custom Providers
@@ -386,33 +378,6 @@ max_input_length: 2000
 # Enable verbose logging
 prompt-regress check --baseline gpt-4 --target claude-opus --verbose
 ```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-### Development Setup
-```bash
-git clone https://github.com/yourusername/prompt-regress.git
-cd prompt-regress
-pip install -e ".[dev]"
-pytest tests/
-```
-
-## 📋 Roadmap
-
-- [ ] **Web Dashboard**: Visual interface for comparing results
-- [ ] **A/B Testing**: Statistical significance testing
-- [ ] **Model Drift Detection**: Monitor performance over time
-- [ ] **Custom Metrics**: Plugin system for domain-specific metrics
-- [ ] **Parallel Processing**: Speed up large test suites
-- [ ] **Result Caching**: Avoid redundant API calls
-- [ ] **Integration Tests**: End-to-end workflow testing
-
 ## 🏆 Why prompt-regress?
 
 ### Before prompt-regress:
@@ -426,27 +391,6 @@ pytest tests/
 - ✅ Quantified quality metrics
 - ✅ Catch issues before deployment
 - ✅ Efficient model evaluation
-
-## 📊 Benchmarks
-
-| Test Suite Size | Models | Average Runtime | Memory Usage |
-|----------------|--------|-----------------|--------------|
-| Small (10 tests) | 2 | 30 seconds | 256 MB |
-| Medium (50 tests) | 3 | 2 minutes | 512 MB |
-| Large (200 tests) | 5 | 8 minutes | 1 GB |
-
-## 🎉 Success Stories
-
-> "prompt-regress saved us from a major production incident when switching from GPT-3.5 to GPT-4. The semantic similarity scores revealed our JSON extraction was breaking." - *AI Startup CTO*
-
-> "We use prompt-regress in our CI/CD pipeline to automatically test 50+ prompt variations. Cut our testing time from days to minutes." - *ML Engineer at Fortune 500*
-
-## 📞 Support
-
-- 📧 Email: support@prompt-regress.com
-- 💬 Discord: [Join our community](https://discord.gg/prompt-regress)
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/prompt-regress/issues)
-- 📖 Docs: [Full Documentation](https://docs.prompt-regress.com)
 
 ## 📄 License
 

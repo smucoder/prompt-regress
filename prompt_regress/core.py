@@ -1,11 +1,12 @@
 import os
 import yaml
 import json
+import asyncio
 
 from typing import Dict, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
-from .models import OpenAIProvider, AnthropicProvider, LocalProvider, ModelResponse
+from .models import OpenAIProvider, AnthropicProvider, LocalProvider, ModelProvider
 from .metrics import SimilarityMetrics
 
 @dataclass
@@ -67,6 +68,15 @@ class PromptRegress:
                         'temperature': 0.7,
                         'max_tokens': 1000
                     }
+                },
+                {
+                    'name': 'deepseek-r1:1.5b',
+                    'provider': 'local',
+                    'host': 'http://localhost:11434',
+                    'parameters':{
+                        'temperature': 0.7,
+                        'max_tokens': 1000
+                    }
                 }
             ],
             'test_cases': [
@@ -74,7 +84,11 @@ class PromptRegress:
                     'name': 'summarization',
                     'prompt_template': 'Summarize this text in 2-3 sentences: {text}',
                     'inputs': [{'text': 'Sample text to summarize'}],
-                    'expect_json': False
+                },
+                {
+                    'name': 'question_answering',
+                    'prompt_template': 'Answer the question based on the context: {context} Question: {question}',
+                    'inputs': [{'context': 'This is a sample context.', 'question': 'What is the context about?'}, {'context': 'My name is Foo.', 'question': 'What is my name?'}],
                 },
                 {
                     'name': 'json_extraction',
@@ -95,20 +109,31 @@ class PromptRegress:
         
         return default_config
     
-    def _get_provider(self, model_name: str):
+    def _get_provider(self, model_config: Dict[str, Any]) -> ModelProvider:
         """
-        Get the provider configuration for a given model.
+        Get the provider instance based on the model configuration.
 
         Args:
-            model_name (str): Name of the model.
+            model_config (Dict[str, Any]): Model configuration containing provider information.
 
         Returns:
-            dict: Provider configuration.
+            ModelProvider: An instance of the provider class.
         """
-        for model_config in self.config.get('models', []):
-            if model_config['name'] == model_name:
-                return model_config
-        raise ValueError(f"Model '{model_name}' not found in configuration.")
+
+        provider_name = model_config['provider']
+
+        if provider_name == 'openai':
+            provider = OpenAIProvider()
+        elif provider_name == 'anthropic':
+            provider = AnthropicProvider()
+        elif provider_name == 'local':
+            if 'host' not in model_config:
+                print("⚠️ Specified Local provider but 'host' not provided in model configuration. Using default 'http://localhost:11434'.")
+            provider = LocalProvider(host=model_config.get('host', "http://localhost:11434"))
+        else:
+            raise ValueError(f"Unsupported provider: {provider_name}")
+        
+        return provider
     
     def run_test_case(self, test_case: dict, model_config: Dict[str, Any]):
         """
@@ -121,17 +146,8 @@ class PromptRegress:
         Returns:
             dict: Results of the test case execution.
         """
-        provider_name = model_config['provider']
-        if provider_name == 'openai':
-            provider = OpenAIProvider()
-        elif provider_name == 'anthropic':
-            provider = AnthropicProvider()
-        elif provider_name == 'local':
-            if 'host' not in model_config:
-                print("⚠️ Specified Local provider but 'host' not provided in model configuration. Using default 'http://localhost:11434'.")
-            provider = LocalProvider(host=model_config.get('host', "http://localhost:11434"))
-        else:
-            raise ValueError(f"Unsupported provider: {provider_name}")
+
+        provider = self._get_provider(model_config)
 
         results = []
         for input_data in test_case['inputs']:
@@ -140,8 +156,33 @@ class PromptRegress:
             results.append(response)
 
         return results
+    
+    async def arun_test_case(self, test_case: dict, model_config: Dict[str, Any]):
+        """
+        Asynchronously run a test case against a specified model.
+
+        Args:
+            test_case (dict): Test case configuration.
+            model_config (Dict[str, Any]): Model configuration.
+
+        Returns:
+            dict: Results of the test case execution.
+        """
+        provider = self._get_provider(model_config)
+
+        prompts = []
+        for input_data in test_case['inputs']:
+            prompt = test_case['prompt_template'].format(**input_data)
+            prompts.append(prompt)
+
+        tasks = []
+        for prompt in prompts:
+            task = provider.agenerate(prompt, model=model_config['name'], **model_config.get('parameters', {}))
+            tasks.append(task)
+        results = await asyncio.gather(*tasks)
+        return results
       
-    def compare_models(self, baseline: str, target: str):
+    async def compare_models(self, baseline: str, target: str, max_concurrent: int = 5):
         """
         Compare outputs between two models.
 
@@ -158,16 +199,17 @@ class PromptRegress:
             raise ValueError(f"⚠️ One or both models not found in configuration. Provided models: baseline={baseline}, target={target}")
         
         if 'metrics' not in self.config:
-            print("⚠️ Metrics are missing in the configuration. Using default metrics.")
+            print("⚠️ Metrics are missing in the configuration. Using default metrics text and semantic similarity " \
+            "with thresholds 0.7 and 0.8.")
             self.config['metrics'] = {
                 'text_similarity': {'threshold': 0.7},
                 'semantic_similarity': {'threshold': 0.8}
             }
 
         results = []
-        for test_case in self.config['test_cases']:
-            baseline_results = self.run_test_case(test_case, baseline_config)
-            target_results = self.run_test_case(test_case, target_config)
+        for test_case in self.config.get('test_cases', []):
+            baseline_results = await self.arun_test_case(test_case, baseline_config)
+            target_results = await self.arun_test_case(test_case, target_config)
 
             for baseline_result, target_result in zip(baseline_results, target_results):
                 text_sim = None
@@ -195,7 +237,7 @@ class PromptRegress:
                 results.append(result)
         return results
                             
-    def generate_report(self, results, format='console') -> str:
+    def generate_report(self, results, verbose, format='console') -> str:
         if format == 'json':
             return json.dumps([asdict(r) for r in results], indent=2)
         
@@ -215,9 +257,10 @@ class PromptRegress:
             for result in results:
                 status = "✅ PASS" if result.passed else "❌ FAIL"
                 report.append(f"{status} {result.test_case}")
-                report.append(f"  Prompt: {result.prompt}")
-                report.append(f"  Baseline Output: {result.baseline_output}")
-                report.append(f"  Target Output: {result.target_output}")
+                if verbose:
+                    report.append(f"  Prompt: {result.prompt}")
+                    report.append(f"  Baseline Output: {result.baseline_output}")
+                    report.append(f"  Target Output: {result.target_output}")
                 report.append(f"  Text Similarity: {result.text_similarity:.3f}")
                 report.append(f"  Semantic Similarity: {result.semantic_similarity:.3f}")
                 

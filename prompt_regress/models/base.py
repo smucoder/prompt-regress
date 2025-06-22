@@ -34,6 +34,19 @@ class ModelProvider(ABC):
         """
         pass
 
+    async def agenerate(self, prompt: str, **kwargs) -> str:
+        """
+        Asynchronously get a completion for the given prompt.
+
+        Args:
+            prompt (str): The input prompt to complete.
+            **kwargs: Additional parameters for the model.
+
+        Returns:
+            str: The model's completion for the prompt.
+        """
+        pass
+
 
     @abstractmethod
     def input_tokens(self, prompt: str) -> int:

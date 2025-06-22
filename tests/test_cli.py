@@ -13,7 +13,7 @@ def test_init_creates_config_file(tmp_path):
     result = runner.invoke(cli, ['init', '--config', str(config_path)])
     assert result.exit_code == 0
     assert config_path.exists()
-    assert "✅  Created configuration at" in result.output
+    assert "✅ Created configuration at" in result.output
 
 def test_init_existing_config(tmp_path):
     runner = CliRunner()

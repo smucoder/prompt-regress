@@ -1,4 +1,4 @@
-from ollama import Client, ChatResponse
+from ollama import Client, ChatResponse, AsyncClient
 from .base import ModelProvider, ModelResponse
 
 class LocalProvider(ModelProvider):
@@ -13,7 +13,7 @@ class LocalProvider(ModelProvider):
         self.client = Client(
             host=host
         )
-
+        self.async_client = AsyncClient()
 
     def generate(self, prompt: str, **kwargs) -> ModelResponse:
         """
@@ -27,6 +27,34 @@ class LocalProvider(ModelProvider):
             ModelResponse: The model's response containing text and metadata.
         """
         response: ChatResponse = self.client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=kwargs.pop('model'),
+            options=kwargs
+        )
+
+        return ModelResponse(
+            text=response.message.content,
+            prompt=prompt,
+            token_count=0,
+            cost=0.0,
+            response_time_ms=0.0,
+            metadata={},
+            raw_response=response
+        )
+    
+    async def agenerate(self, prompt, **kwargs):
+        """
+        Asynchronously get a completion for the given prompt using Ollama's API.
+
+        Args:
+            prompt (str): The input prompt to complete.
+            **kwargs: Additional parameters for the model.
+
+        Returns:
+            ModelResponse: The model's response containing text and metadata.
+        """
+
+        response: ChatResponse = await self.async_client.chat(
             messages=[{"role": "user", "content": prompt}],
             model=kwargs.pop('model'),
             options=kwargs
