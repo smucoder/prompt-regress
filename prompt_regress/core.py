@@ -1,9 +1,8 @@
-import os
 import yaml
 import json
 import asyncio
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from .models import OpenAIProvider, AnthropicProvider, LocalProvider, ModelProvider
@@ -30,7 +29,10 @@ class PromptRegress:
         """
         self.config_path = config_path
         self.config = self.load_config()
-        self.metrics = SimilarityMetrics()
+        self.regression_options = self.config.get('regression_options', {})
+        self.max_concurrency = self.regression_options.get('max_concurrency', 5)
+        embedding_model = self.regression_options.get('embedding_model', 'Qwen/Qwen3-Embedding-0.6B')
+        self.metrics = SimilarityMetrics(embedding_model=embedding_model)
 
     def load_config(self):
         """
@@ -100,6 +102,9 @@ class PromptRegress:
             'metrics': {
                 'text_similarity': {'threshold': 0.7},
                 'semantic_similarity': {'threshold': 0.8}
+            },
+            'regression_options': {
+                'max_concurrency': 5
             }
         }
         
@@ -108,6 +113,22 @@ class PromptRegress:
             yaml.dump(default_config, f, default_flow_style=False)
         
         return default_config
+    
+    def _is_valid_json(result):
+        """
+        Check whether given text is a valid json
+
+        Args:
+            result: text
+
+        Returns:
+            True or False
+        """
+        try:
+            json.loads(result)
+            return True
+        except json.JSONDecodeError:
+            return False
     
     def _get_provider(self, model_config: Dict[str, Any]) -> ModelProvider:
         """
@@ -121,41 +142,19 @@ class PromptRegress:
         """
 
         provider_name = model_config['provider']
-
+        
         if provider_name == 'openai':
-            provider = OpenAIProvider()
+            provider = OpenAIProvider(model=model_config['name'], max_concurrency=self.max_concurrency)
         elif provider_name == 'anthropic':
-            provider = AnthropicProvider()
+            provider = AnthropicProvider(max_concurrency=self.max_concurrency)
         elif provider_name == 'local':
             if 'host' not in model_config:
                 print("⚠️ Specified Local provider but 'host' not provided in model configuration. Using default 'http://localhost:11434'.")
-            provider = LocalProvider(host=model_config.get('host', "http://localhost:11434"))
+            provider = LocalProvider(host=model_config.get('host', "http://localhost:11434"), max_concurrency=self.max_concurrency)
         else:
             raise ValueError(f"Unsupported provider: {provider_name}")
         
         return provider
-    
-    def run_test_case(self, test_case: dict, model_config: Dict[str, Any]):
-        """
-        Run a test case against a specified model.
-
-        Args:
-            test_case (dict): Test case configuration.
-            model_config (Dict[str, Any]): Model configuration.
-
-        Returns:
-            dict: Results of the test case execution.
-        """
-
-        provider = self._get_provider(model_config)
-
-        results = []
-        for input_data in test_case['inputs']:
-            prompt = test_case['prompt_template'].format(**input_data)
-            response = provider.generate(prompt, model=model_config['name'], **model_config.get('parameters', {}))
-            results.append(response)
-
-        return results
     
     async def arun_test_case(self, test_case: dict, model_config: Dict[str, Any]):
         """
@@ -182,7 +181,7 @@ class PromptRegress:
         results = await asyncio.gather(*tasks)
         return results
       
-    async def compare_models(self, baseline: str, target: str, max_concurrent: int = 5):
+    async def acompare_models(self, baseline: str, target: str) -> List[ComparisonResult]:
         """
         Compare outputs between two models.
 
@@ -206,14 +205,31 @@ class PromptRegress:
                 'semantic_similarity': {'threshold': 0.8}
             }
 
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def run_with_semaphore(test_case, model_config):
+            async with semaphore:
+                return await self.arun_test_case(test_case, model_config)
+
+        test_cases = self.config.get('test_cases', [])
+
+        tasks = []
+        for test_case in test_cases:
+            baseline_task = run_with_semaphore(test_case, baseline_config)
+            target_task = run_with_semaphore(test_case, target_config)
+            tasks.extend([baseline_task, target_task])
+
+        all_results = await asyncio.gather(*tasks)
+
+        baseline_results_list = all_results[::2]
+        target_results_list = all_results[1::2]
+
         results = []
-        for test_case in self.config.get('test_cases', []):
-            baseline_results = await self.arun_test_case(test_case, baseline_config)
-            target_results = await self.arun_test_case(test_case, target_config)
+        for i, test_case in enumerate(test_cases):
+            baseline_results = baseline_results_list[i]
+            target_results = target_results_list[i]
 
             for baseline_result, target_result in zip(baseline_results, target_results):
-                text_sim = None
-                semantic_sim = None
                 metric_results = []
                 if 'text_similarity' in self.config['metrics']:
                     text_sim = self.metrics.text_similarity(baseline_result.text, target_result.text)
@@ -221,7 +237,11 @@ class PromptRegress:
                 if 'semantic_similarity' in self.config['metrics']:
                     semantic_sim = self.metrics.semantic_similarity(baseline_result.text, target_result.text)
                     metric_results.append(semantic_sim >= self.config['metrics']['semantic_similarity']['threshold'])
-                # Passed if all present metrics pass their thresholds
+                if test_case.get('expect_json', False):
+                    is_baseline_valid_json = self._is_valid_json(baseline_result.text)
+                    is_target_valid_json = self._is_valid_json(target_result.text)
+                    metric_results.extend([is_baseline_valid_json, is_target_valid_json])
+
                 passed = all(metric_results) if metric_results else False
                 
                 result = ComparisonResult(

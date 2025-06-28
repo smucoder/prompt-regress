@@ -1,13 +1,16 @@
-from anthropic import Anthropic, AsyncAnthropic
 import tiktoken
+import asyncio
+
+from anthropic import Anthropic, AsyncAnthropic
 from .base import ModelProvider, ModelResponse
 
 class AnthropicProvider(ModelProvider):
-    def __init__(self):
+    def __init__(self, max_concurrency: int = 5):
         super().__init__()
 
         self.client = Anthropic()
         self.async_client = AsyncAnthropic()
+        self.semaphore = asyncio.Semaphore(max_concurrency)
         self.encoding = tiktoken.encoding_for_model("gpt-4o")
 
 
@@ -59,30 +62,31 @@ class AnthropicProvider(ModelProvider):
         Returns:
             str: The model's completion for the prompt.
         """
-        message = await self.async_client.messages.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                }
-            ],
-            **kwargs
-            )
+        async with self.semaphore:
+            message = await self.async_client.messages.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                **kwargs
+                )
 
-        return ModelResponse(
-            text=message['content'][0]['text'],
-            prompt=prompt,
-            token_count=0,
-            cost=0, 
-            response_time_m=0,
-            metadata={},
-            raw_response=message
-            )
+            return ModelResponse(
+                text=message['content'][0]['text'],
+                prompt=prompt,
+                token_count=0,
+                cost=0, 
+                response_time_m=0,
+                metadata={},
+                raw_response=message
+                )
     
     def input_tokens(self, prompt: str) -> int:
         """

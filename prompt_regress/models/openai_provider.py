@@ -1,15 +1,17 @@
 import tiktoken
+import asyncio
 from openai import OpenAI, AsyncOpenAI
 from .base import ModelProvider, ModelResponse
 
 class OpenAIProvider(ModelProvider):
-    def __init__(self):
+    def __init__(self, model, max_concurrency: int = 5):
         super().__init__()
         self.client = OpenAI()
         self.async_client =  AsyncOpenAI()
+        self.semaphore = asyncio.Semaphore(max_concurrency)
 
         try:
-            self.encoding = tiktoken.encoding_for_model("gpt-4o")
+            self.encoding = tiktoken.encoding_for_model(model)
         except KeyError:
             self.encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -51,20 +53,21 @@ class OpenAIProvider(ModelProvider):
         Returns:
             str: The model's completion for the prompt.
         """
-        response = await self.async_client.responses.create(
-            input=prompt,
-            **kwargs
-        )
-
-        return ModelResponse(
-            text=response.output_text,
-            prompt=prompt,
-            token_count=0,
-            cost=0,
-            response_time_m=0,
-            metadata={},
-            raw_response=response
-        )
+        async with self.semaphore:
+            response = await self.async_client.responses.create(
+                input=prompt,
+                **kwargs
+            )
+            
+            return ModelResponse(
+                text=response.output_text,
+                prompt=prompt,
+                token_count=0,
+                cost=0,
+                response_time_m=0,
+                metadata={},
+                raw_response=response
+            )
     
 
     def input_tokens(self, prompt: str) -> int:

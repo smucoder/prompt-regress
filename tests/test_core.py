@@ -1,13 +1,20 @@
 import pytest
-from pathlib import Path
 from prompt_regress.core import PromptRegress
+
+# Mock OpenAIProvider
+class DummyProvider:
+    def __init__(self, **kwargs):
+        pass
+
+    async def agenerate(self, prompt, **kwargs):
+        return "response"
 
 @pytest.fixture
 def sample_config(tmp_path):
     config = {
         "models": [
             {"name": "openai", "provider": "openai"},
-            {"name": "anthropic", "provider": "anthropic"},
+            {"name": "dummy", "provider": "dummy"},
         ]
     }
     config_path = tmp_path / "config.yml"
@@ -22,29 +29,29 @@ def test_load_config(sample_config):
     assert hasattr(pr, "config")
     assert "models" in pr.config
 
-def test_get_provider_found(sample_config):
+def test_get_provider_found(monkeypatch, sample_config):
     pr = PromptRegress(sample_config)
-    pr.load_config()
-    provider = pr._get_provider("openai")
-    assert provider["provider"] == "openai"
+    config = pr.load_config()
+
+    monkeypatch.setattr("prompt_regress.core.OpenAIProvider", DummyProvider)
+
+    provider = pr._get_provider(config['models'][0])
+    assert isinstance(provider, DummyProvider)
 
 def test_get_provider_not_found(sample_config):
     pr = PromptRegress(sample_config)
-    pr.load_config()
+    config = pr.load_config()
     with pytest.raises(ValueError):
-        pr._get_provider("nonexistent")
+        pr._get_provider(config['models'][1])
 
-def test_run_test_case_openai(monkeypatch, sample_config):
+@pytest.mark.asyncio
+async def test_arun_test_case_openai(monkeypatch, sample_config):
     pr = PromptRegress(sample_config)
     pr.load_config()
     test_case = {"inputs": [{"input": "hello"}], "name": "test", "prompt_template": "{input}"}
     model_config = {"provider": "openai", "name": "openai"}
 
-    # Mock OpenAIProvider
-    class DummyProvider:
-        def generate(self, prompt, **kwargs):
-            return "response"
     monkeypatch.setattr("prompt_regress.core.OpenAIProvider", DummyProvider)
 
-    result = pr.run_test_case(test_case, model_config)
+    result = await pr.arun_test_case(test_case, model_config)
     assert isinstance(result, list)

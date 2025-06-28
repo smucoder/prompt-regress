@@ -4,7 +4,7 @@ from prompt_regress.metrics import SimilarityMetrics
 
 @pytest.fixture
 def metrics():
-    return SimilarityMetrics()
+    return SimilarityMetrics(embedding_model='Qwen/Qwen3-Embedding-0.6B')
 
 def test_text_similarity_identical(metrics):
     assert metrics.text_similarity("hello world", "hello world") == 1.0

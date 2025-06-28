@@ -12,7 +12,7 @@ class SimilarityMetrics:
     between two texts using a pre-trained model.
     """
     
-    def __init__(self, embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"):
+    def __init__(self, embedding_model: str):
         """
         Initialize the SimilarityMetrics class with a pre-trained embedding model.
 
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     text1 = "This is a test sentence."
     text2 = "This is a another test sentence."
 
-    metrics = SimilarityMetrics()
+    metrics = SimilarityMetrics(embedding_model='Qwen/Qwen3-Embedding-0.6B')
     
     print("Text Similarity:", metrics.text_similarity(text1, text2))
     print("Semantic Similarity:", metrics.semantic_similarity(text1, text2))

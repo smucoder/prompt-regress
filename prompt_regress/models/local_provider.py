@@ -1,8 +1,11 @@
+import asyncio
+import tiktoken
+
 from ollama import Client, ChatResponse, AsyncClient
 from .base import ModelProvider, ModelResponse
 
 class LocalProvider(ModelProvider):
-    def __init__(self, host: str):
+    def __init__(self, host: str, max_concurrency: int = 5):
         """
         Initialize the LocalProvider with the Ollama client.
 
@@ -10,10 +13,10 @@ class LocalProvider(ModelProvider):
             url (str): The URL of the Ollama server. Defaults to "http://localhost:11434".
         """
         super().__init__()
-        self.client = Client(
-            host=host
-        )
-        self.async_client = AsyncClient()
+        self.client = Client(host=host)
+        self.async_client = AsyncClient(host=host)
+        self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def generate(self, prompt: str, **kwargs) -> ModelResponse:
         """
@@ -53,12 +56,12 @@ class LocalProvider(ModelProvider):
         Returns:
             ModelResponse: The model's response containing text and metadata.
         """
-
-        response: ChatResponse = await self.async_client.chat(
-            messages=[{"role": "user", "content": prompt}],
-            model=kwargs.pop('model'),
-            options=kwargs
-        )
+        async with self.semaphore:
+            response: ChatResponse = await self.async_client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                model=kwargs.pop('model'),
+                options=kwargs
+            )
 
         return ModelResponse(
             text=response.message.content,

@@ -3,7 +3,7 @@ from prompt_regress.models import OpenAIProvider, AnthropicProvider, LocalProvid
 
 @pytest.fixture
 def openai_provider():
-    return OpenAIProvider()
+    return OpenAIProvider(model="gpt-3.5-turbo")
 
 @pytest.fixture
 def anthropic_provider():
@@ -11,20 +11,22 @@ def anthropic_provider():
 
 @pytest.fixture
 def local_provider():
-    return LocalProvider()
+    return LocalProvider(host="http://localhost:11434")
 
-
-def test_openai_provider(openai_provider):
-    response = openai_provider.generate("Hello, world!", model_name="gpt-3.5-turbo")
+@pytest.mark.asyncio
+async def test_openai_provider(openai_provider):
+    response = await  openai_provider.agenerate("Hello, world!", model="gpt-3.5-turbo")
     assert isinstance(response, str)
     assert len(response) > 0
 
-def test_anthropic_provider(anthropic_provider):
-    response = anthropic_provider.generate("Hello, world!", model_name="claude-2")
+@pytest.mark.asyncio
+async def test_anthropic_provider(anthropic_provider):
+    response = await anthropic_provider.agenerate("Hello, world!", model="claude-2", max_tokens=100)
     assert isinstance(response, str)
     assert len(response) > 0 
 
-def test_local_provider(local_provider):
-    response = local_provider.generate("Hello, world!", model_name="deepseek-r1:1.5b")
-    assert isinstance(response, str)
-    assert len(response) > 0
+@pytest.mark.asyncio
+async def test_local_provider(local_provider):
+    response = await local_provider.agenerate("Hello, world!", model="deepseek-r1:1.5b")
+    assert isinstance(response.text, str)
+    assert len(response.text) > 0

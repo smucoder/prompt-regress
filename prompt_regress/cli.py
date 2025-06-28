@@ -1,6 +1,7 @@
 __version__ = "0.1.0"
 
 import click
+import asyncio
 from pathlib import Path
 from .core import PromptRegress
 
@@ -35,7 +36,7 @@ def check(baseline, target, verbose, config, format, fail_on_regression):
     "Compare outputs between two models and check for regressions."
     try:
         regress = PromptRegress(Path(config))
-        results = regress.compare_models(baseline, target)
+        results = asyncio.run(regress.acompare_models(baseline, target))
         report = regress.generate_report(results, verbose, format)
 
         click.echo(report)
