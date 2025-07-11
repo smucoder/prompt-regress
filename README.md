@@ -50,6 +50,8 @@ models:
     max_tokens: 1000
     temperature: 0.7
   provider: local
+regression_options:
+  max_concurrency: 5
 test_cases:
 - inputs:
   - text: Sample text to summarize
@@ -68,7 +70,9 @@ test_cases:
   - data: John Doe, age 30, works at TechCorp
   name: json_extraction
   prompt_template: 'Extract key information as JSON: {data}'
+
 ```
+ > 💡 **Note:** For more examples please check [here](examples/examples.md).
 
 ### 2. Compare Models
 
@@ -85,14 +89,10 @@ prompt-regress check --baseline gpt-4 --target claude-opus
 ✅ PASS summarization
   Text Similarity: 0.856
   Semantic Similarity: 0.923
-  Token Difference: +12
-  Cost Difference: +$0.000180
 
 ✅ PASS json_extraction
   Text Similarity: 0.734
   Semantic Similarity: 0.891
-  Token Difference: -5
-  Cost Difference: -$0.000075
 ```
 
 ### 3. CI/CD Integration
@@ -395,13 +395,5 @@ prompt-regress check --baseline gpt-4 --target claude-opus --verbose
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) for semantic similarity
-- [Click](https://github.com/pallets/click) for the CLI framework
-- The AI community for inspiration and feedback
-
----
 
 ⭐ **Star this repo if prompt-regress helps you build better AI applications!**

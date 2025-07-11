@@ -114,7 +114,7 @@ class PromptRegress:
         
         return default_config
     
-    def _is_valid_json(result):
+    def _is_valid_json(self, result):
         """
         Check whether given text is a valid json
 
@@ -229,14 +229,20 @@ class PromptRegress:
             baseline_results = baseline_results_list[i]
             target_results = target_results_list[i]
 
-            for baseline_result, target_result in zip(baseline_results, target_results):
+            baseline_texts = [result.text for result in baseline_results]
+            target_texts = [result.text for result in target_results]
+
+            if 'text_similarity' in self.config['metrics']:
+                text_similarities = self.metrics.text_similarity(baseline_texts, target_texts)
+            if 'semantic_similarity' in self.config['metrics']:
+                semantic_similarities = self.metrics.semantic_similarity(baseline_texts, target_texts)
+
+            for res_idx, (baseline_result, target_result) in enumerate(zip(baseline_results, target_results)):
                 metric_results = []
                 if 'text_similarity' in self.config['metrics']:
-                    text_sim = self.metrics.text_similarity(baseline_result.text, target_result.text)
-                    metric_results.append(text_sim >= self.config['metrics']['text_similarity']['threshold'])
+                    metric_results.append(text_similarities[res_idx] >= self.config['metrics']['text_similarity']['threshold'])
                 if 'semantic_similarity' in self.config['metrics']:
-                    semantic_sim = self.metrics.semantic_similarity(baseline_result.text, target_result.text)
-                    metric_results.append(semantic_sim >= self.config['metrics']['semantic_similarity']['threshold'])
+                    metric_results.append(semantic_similarities[res_idx] >= self.config['metrics']['semantic_similarity']['threshold'])
                 if test_case.get('expect_json', False):
                     is_baseline_valid_json = self._is_valid_json(baseline_result.text)
                     is_target_valid_json = self._is_valid_json(target_result.text)
@@ -249,8 +255,8 @@ class PromptRegress:
                     prompt=baseline_result.prompt,
                     baseline_output=baseline_result.text,
                     target_output=target_result.text,
-                    text_similarity=text_sim,
-                    semantic_similarity=semantic_sim,
+                    text_similarity=text_similarities[res_idx],
+                    semantic_similarity=semantic_similarities[res_idx],
                     passed=passed
                 )
 

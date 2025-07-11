@@ -88,7 +88,7 @@ class AnthropicProvider(ModelProvider):
                 raw_response=message
                 )
     
-    def input_tokens(self, prompt: str) -> int:
+    def get_tokens(self, prompt: str) -> int:
         """
         Calculate the number of input tokens for the given prompt.
 

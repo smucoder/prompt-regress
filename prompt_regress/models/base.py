@@ -34,6 +34,7 @@ class ModelProvider(ABC):
         """
         pass
 
+    @abstractmethod
     async def agenerate(self, prompt: str, **kwargs) -> str:
         """
         Asynchronously get a completion for the given prompt.
@@ -49,7 +50,7 @@ class ModelProvider(ABC):
 
 
     @abstractmethod
-    def input_tokens(self, prompt: str) -> int:
+    def get_tokens(self, prompt: str) -> int:
         """
         Calculate the number of input tokens for the given prompt.
 

@@ -1,7 +1,9 @@
 import torch
+import numpy as np
 
+from typing import List
 from sentence_transformers import SentenceTransformer
-from difflib import SequenceMatcher
+from rapidfuzz import fuzz, process
 
 
 class SimilarityMetrics:
@@ -12,7 +14,7 @@ class SimilarityMetrics:
     between two texts using a pre-trained model.
     """
     
-    def __init__(self, embedding_model: str):
+    def __init__(self, embedding_model: str, batch_size: int = 16):
         """
         Initialize the SimilarityMetrics class with a pre-trained embedding model.
 
@@ -21,9 +23,10 @@ class SimilarityMetrics:
                                    Default is "Qwen/Qwen3-Embedding-0.6B".
         """
         self.model = SentenceTransformer(embedding_model, device="cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = batch_size
 
 
-    def text_similarity(self, text1: str, text2: str) -> float:
+    def text_similarity(self, baseline_texts: List[str], target_texts: List[str]) -> List[float]:
         """
         Calculate the similarity between two texts using a simple character-based ratio.
         
@@ -34,11 +37,14 @@ class SimilarityMetrics:
         Returns:
             float: A similarity score between 0 and 1.
         """
-        ratio = SequenceMatcher(None, text1, text2).ratio()
-        return round(ratio, 2)
+        if not baseline_texts or not target_texts:
+            raise ValueError("Both baseline_texts and target_texts must be non-empty lists.")
+        similarity_matrix = process.cdist(baseline_texts, target_texts, scorer=fuzz.ratio)
+        one_to_one = np.diag(similarity_matrix) / 100.0
+        return one_to_one
 
 
-    def semantic_similarity(self, text1: str, text2: str) -> float:
+    def semantic_similarity(self, baseline_texts: List[str], target_texts: List[str]) -> List[float]:
         """
         Calculate the semantic similarity between two texts using a pre-trained model.
         
@@ -49,17 +55,20 @@ class SimilarityMetrics:
         Returns:
             float: A similarity score between 0 and 1.
         """
-        embeddings = self.model.encode([text1, text2])
-        similarity = self.model.similarity(embeddings[0], embeddings[1])
-
-        return round(similarity.item(), 2)
+        if not baseline_texts or not target_texts:
+            raise ValueError("Both baseline_texts and target_texts must be non-empty lists.")
+        baseline_embeddings = self.model.encode(baseline_texts, batch_size=self.batch_size, convert_to_tensor=True)
+        target_embeddings = self.model.encode(target_texts, batch_size=self.batch_size, convert_to_tensor=True)
+        similarities = torch.cosine_similarity(baseline_embeddings, target_embeddings, dim=1)
+        similarities = similarities.cpu().numpy()
+        return similarities
 
 
 if __name__ == "__main__":
-    text1 = "This is a test sentence."
-    text2 = "This is a another test sentence."
+    texts1 = []
+    texts2 = ["b"]
 
     metrics = SimilarityMetrics(embedding_model='Qwen/Qwen3-Embedding-0.6B')
     
-    print("Text Similarity:", metrics.text_similarity(text1, text2))
-    print("Semantic Similarity:", metrics.semantic_similarity(text1, text2))
+    print("Text Similarity:", metrics.text_similarity(texts1, texts2))
+    print("Semantic Similarity:", metrics.semantic_similarity(texts1, texts2))

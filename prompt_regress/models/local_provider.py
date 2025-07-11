@@ -73,7 +73,7 @@ class LocalProvider(ModelProvider):
             raw_response=response
         )
     
-    def input_tokens(self, prompt: str) -> int:
+    def get_tokens(self, prompt: str) -> int:
         """
         Calculate the number of input tokens for the given prompt.
 
