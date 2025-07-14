@@ -37,7 +37,7 @@ class OpenAIProvider(ModelProvider):
             prompt=prompt,
             token_count=0,
             cost=0,
-            response_time_m=0,
+            response_time_ms=0,
             metadata={},
             raw_response=response
         )
@@ -64,7 +64,7 @@ class OpenAIProvider(ModelProvider):
                 prompt=prompt,
                 token_count=0,
                 cost=0,
-                response_time_m=0,
+                response_time_ms=0,
                 metadata={},
                 raw_response=response
             )

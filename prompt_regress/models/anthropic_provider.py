@@ -1,4 +1,3 @@
-import tiktoken
 import asyncio
 
 from anthropic import Anthropic, AsyncAnthropic
@@ -11,7 +10,6 @@ class AnthropicProvider(ModelProvider):
         self.client = Anthropic()
         self.async_client = AsyncAnthropic()
         self.semaphore = asyncio.Semaphore(max_concurrency)
-        self.encoding = tiktoken.encoding_for_model("gpt-4o")
 
 
     def generate(self, prompt: str, **kwargs) -> str:
@@ -42,11 +40,11 @@ class AnthropicProvider(ModelProvider):
 
 
         return ModelResponse(
-            text=message['content'][0]['text'],
+            text=message.content[0].text,
             prompt=prompt,
             token_count=0,
             cost=0,
-            response_time_m=0,
+            response_time_ms=0,
             metadata={},
             raw_response=message
             )
@@ -79,11 +77,11 @@ class AnthropicProvider(ModelProvider):
                 )
 
             return ModelResponse(
-                text=message['content'][0]['text'],
+                text=message.content[0].text,
                 prompt=prompt,
                 token_count=0,
                 cost=0, 
-                response_time_m=0,
+                response_time_ms=0,
                 metadata={},
                 raw_response=message
                 )
