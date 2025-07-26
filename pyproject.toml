@@ -19,4 +19,4 @@ dependencies = [
 ]
 
 [project.scripts]
-prompt-regress = "prompt_regress.cli:main"
+prompt-regress = "prompt_regress.cli:cli"
